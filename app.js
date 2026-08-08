@@ -81,7 +81,7 @@ class DataFetcher {
 
     const today = new Date();
     const from = today.toISOString().split('T')[0];
-    const to = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const to = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const data = await this._fetch(`/matches?competitions=${leagueCode}&dateFrom=${from}&dateTo=${to}&limit=100`);
     this._writeCache(key, data);
@@ -324,7 +324,7 @@ class UIRenderer {
 
     const dates = Object.keys(grouped).sort();
     if (!dates.length) {
-      this.matchList.appendChild(el('p', 'no-pick', 'No upcoming fixtures found for the next 30 days.'));
+      this.matchList.appendChild(el('p', 'no-pick', 'No upcoming fixtures found for the next 7 days.'));
       return;
     }
 
@@ -557,7 +557,7 @@ class AppController {
         throw new Error('You are opening this page directly from a file. Please run "npx vercel dev" or use a local server so the API proxy can work.');
       }
 
-      console.log('[App] Loading upcoming fixtures for next 30 days...');
+      console.log('[App] Loading upcoming fixtures for next 7 days...');
       const allMatches = [];
       const standingsPromises = [];
 
@@ -580,7 +580,7 @@ class AppController {
         this._allMatches = [];
         this.ui.hideStatus();
         if (this._loadErrors.length > 0) {
-          this.ui.showError(`Failed to load fixtures.\n\n${this._loadErrors.join('\n')}\n\nIf deployed on Vercel, ensure FOOTBALL_DATA_API_KEY is set in Environment Variables.`);
+          this.ui.showError(`Failed to load fixtures.\n\n${this._loadErrors.join('\n')}\n\nNote: The free tier of football-data.org may not have fixtures available for all leagues.`);
         } else {
           this.ui.renderGrouped({});
         }
