@@ -11,7 +11,7 @@
 /* ---------------- Config ---------------- */
 const CONFIG = {
   PROXY: '/api/football',
-  CACHE_TTL: 2 * 60 * 1000, // 2 minutes for live data
+  CACHE_TTL: 5 * 60 * 1000, // 5 minutes
   THRESHOLD: 75,
   DEFAULT_LEAGUE: 'PL',
   COMPETITIONS: [
@@ -36,10 +36,13 @@ function el(tag, cls, text) {
   return node;
 }
 
-function fmtTime(iso) {
-  if (!iso) return '--:--';
+function fmtDate(iso) {
   const d = new Date(iso);
-  if (isNaN(d)) return '--:--';
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function fmtTime(iso) {
+  const d = new Date(iso);
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
@@ -55,12 +58,12 @@ class DataFetcher {
     this.proxy = proxy;
   }
 
-  async getLiveMatches() {
-    const key = 'vs_live_matches';
+  async getFixtures(leagueCode) {
+    const key = `vs_fixtures_${leagueCode}`;
     const cached = this._readCache(key);
     if (cached) return cached;
 
-    const data = await this._fetch('/matches?status=LIVE&limit=50');
+    const data = await this._fetch(`/matches?competitions=${leagueCode}&status=SCHEDULED&limit=20`);
     this._writeCache(key, data);
     return data;
   }
@@ -88,7 +91,7 @@ class DataFetcher {
   async _fetch(path) {
     const url = this.proxy + path;
     console.log(`[DataFetcher] Fetching: ${url}`);
-    
+
     let res;
     try {
       res = await fetch(url, {
@@ -260,20 +263,18 @@ class UIRenderer {
     this.loading = $('#loading');
     this.error = $('#error');
     this.errorMsg = $('#errorMessage');
-    this.actions = $('#actions');
+    this.updatedLabel = $('#updatedLabel');
   }
 
   showLoading() {
     this.loading.hidden = false;
     this.error.hidden = true;
-    this.actions.hidden = true;
     this.matchList.innerHTML = '';
   }
 
   showError(msg) {
     this.loading.hidden = true;
     this.error.hidden = false;
-    this.actions.hidden = true;
     this.errorMsg.textContent = msg;
     this.matchList.innerHTML = '';
   }
@@ -283,29 +284,24 @@ class UIRenderer {
     this.error.hidden = true;
   }
 
-  showActions() {
-    this.actions.hidden = false;
-  }
-
-  render(matches) {
+  render(matches, leagueName) {
     this.matchList.innerHTML = '';
-    this.hideStatus();
-    this.showActions();
+    this.updatedLabel.textContent = `Updated ${new Date().toLocaleTimeString()}`;
 
     if (!matches.length) {
-      this.matchList.appendChild(el('p', 'no-pick', 'No live matches at the moment.'));
+      this.matchList.appendChild(el('p', 'no-pick', 'No upcoming fixtures found.'));
       return;
     }
 
     const frag = document.createDocumentFragment();
-    matches.forEach((m) => frag.appendChild(this._card(m)));
+    matches.forEach((m) => frag.appendChild(this._card(m, leagueName)));
     this.matchList.appendChild(frag);
   }
 
-  _card(match) {
+  _card(match, leagueName) {
     const card = el('article', 'match-card');
     card.dataset.id = match.id;
-    card.append(this._main(match), this._predictions(match));
+    card.append(el('div', 'league-tag', leagueName), this._main(match), this._predictions(match));
     return card;
   }
 
@@ -314,8 +310,7 @@ class UIRenderer {
     main.append(
       this._team(match.homeTeam),
       this._center(match),
-      this._team(match.awayTeam, true),
-      this._toggle(match)
+      this._team(match.awayTeam, true)
     );
     return main;
   }
@@ -335,28 +330,18 @@ class UIRenderer {
 
   _center(match) {
     const center = el('div', 'match-center');
-    const time = fmtTime(match.utcDate);
     center.append(
-      el('span', 'match-time', time),
-      el('span', 'vs', 'VS')
+      el('span', 'match-time', fmtTime(match.utcDate)),
+      el('span', 'vs', 'VS'),
+      el('span', 'match-date', fmtDate(match.utcDate))
     );
     return center;
-  }
-
-  _toggle(match) {
-    const wrap = el('label', 'toggle-switch');
-    const input = el('input', '');
-    input.type = 'checkbox';
-    input.dataset.matchId = match.id;
-    wrap.append(input, el('span', 'toggle-slider'));
-    return wrap;
   }
 
   _predictions(match) {
     const wrapper = el('div', 'predict-wrap');
     const { analysis } = match;
     const body = el('div', 'predict-body');
-
     if (analysis.qualified.length) {
       body.appendChild(this._banner(analysis.qualified));
     } else {
@@ -368,17 +353,16 @@ class UIRenderer {
       mkt.picks.forEach((p) => body.appendChild(this._probRow(p)));
     });
 
-    wrapper.appendChild(this._togglePredictions(match));
+    wrapper.appendChild(this._toggle(match));
     wrapper.appendChild(body);
-    wrapper.addEventListener('click', (e) => {
-      if (e.target.closest('.toggle-switch')) return;
+    wrapper.addEventListener('click', () => {
       const open = wrapper.classList.toggle('open');
       wrapper.querySelector('.predict-toggle').setAttribute('aria-expanded', String(open));
     });
     return wrapper;
   }
 
-  _togglePredictions(match) {
+  _toggle(match) {
     const { qualified } = match.analysis;
     const label = el('span', 'label');
     label.textContent = qualified.length
@@ -485,40 +469,29 @@ class AppController {
   _bind() {
     $('#retryBtn').addEventListener('click', () => this.load());
     $('#searchInput').addEventListener('input', (e) => this._filter(e.target.value));
-    $('#toggleAllBtn').addEventListener('click', () => this._toggleAll());
-    $('#runPredictionBtn').addEventListener('click', () => this._runPrediction());
-    $('#allEventsBtn').addEventListener('click', () => {
-      this.league = null;
-      this._clearFilterTabs();
-      this.load();
-    });
-  }
-
-  _clearFilterTabs() {
-    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
   }
 
   async load() {
     this.ui.showLoading();
     try {
-      console.log('[App] Loading live matches...');
-      const [liveData, standings] = await Promise.all([
-        this.fetcher.getLiveMatches(),
+      console.log('[App] Loading upcoming fixtures...');
+      const [fixtures, standings] = await Promise.all([
+        this.fetcher.getFixtures(this.league),
         this.fetcher.getStandings(this.league)
       ]);
 
-      const matches = liveData.matches || [];
-      console.log(`[App] Found ${matches.length} live matches`);
+      const matches = fixtures.matches || [];
+      console.log(`[App] Found ${matches.length} upcoming fixtures`);
 
       if (matches.length) {
         const enriched = await this.enricher.enrich(matches, standings.standings || null);
         this._allMatches = enriched;
-        this.ui.render(enriched);
+        this.ui.hideStatus();
+        this.ui.render(enriched, this._leagueName());
       } else {
         this._allMatches = [];
         this.ui.hideStatus();
-        this.ui.showActions();
-        this.ui.matchList.appendChild(el('p', 'no-pick', 'No live matches right now. Check back later!'));
+        this.ui.render([], this._leagueName());
       }
     } catch (err) {
       console.error('[App] Load error:', err);
@@ -537,7 +510,7 @@ class AppController {
     if (!this._allMatches.length) return;
     const q = query.trim().toLowerCase();
     if (!q) {
-      this.ui.render(this._allMatches);
+      this.ui.render(this._allMatches, this._leagueName());
       return;
     }
     const filtered = this._allMatches.filter(
@@ -545,40 +518,12 @@ class AppController {
         m.homeTeam.name.toLowerCase().includes(q) ||
         m.awayTeam.name.toLowerCase().includes(q)
     );
-    this.ui.render(filtered);
+    this.ui.render(filtered, this._leagueName());
   }
 
-  _toggleAll() {
-    const toggles = document.querySelectorAll('.toggle-switch input');
-    const allChecked = [...toggles].every((cb) => cb.checked);
-    toggles.forEach((cb) => (cb.checked = !allChecked));
-  }
-
-  _runPrediction() {
-    const checked = document.querySelectorAll('.toggle-switch input:checked');
-    if (!checked.length) {
-      alert('Please select at least one match to run predictions.');
-      return;
-    }
-
-    const ids = [...checked].map((cb) => cb.dataset.matchId);
-    const selected = this._allMatches.filter((m) => ids.includes(m.id));
-    
-    // Re-run analysis for selected matches
-    selected.forEach((m) => {
-      const home = this.engine._teamStat(m.homeTeam.id, []);
-      const away = this.engine._teamStat(m.awayTeam.id, []);
-      const hForm = this.engine._formScore([]);
-      const aForm = this.engine._formScore([]);
-      const strength = this.engine._strength(home, away, hForm, aForm);
-      m.analysis = this.engine.analyze(m, [], {});
-    });
-
-    this.ui.render(selected);
-    
-    // Scroll to first selected match
-    const first = document.querySelector(`.match-card[data-id="${ids[0]}"]`);
-    if (first) first.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  _leagueName() {
+    const comp = CONFIG.COMPETITIONS.find((c) => c.code === this.league);
+    return comp ? comp.name : this.league;
   }
 }
 
@@ -587,7 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] Initializing...');
   console.log('[App] Proxy URL:', CONFIG.PROXY);
   console.log('[App] API Key present:', !!process.env?.FOOTBALL_DATA_API_KEY);
-  
+
   window.app = new AppController();
   window.app.load();
 });

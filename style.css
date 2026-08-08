@@ -17,6 +17,8 @@
   --red: #ef4444;
   --radius: 14px;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --nav-h: 64px;
+  --bottom-nav-h: 64px;
 }
 
 * {
@@ -35,6 +37,7 @@ body {
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
+  padding-bottom: calc(var(--bottom-nav-h) + 16px);
 }
 
 button {
@@ -52,66 +55,68 @@ button {
   z-index: 50;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   padding: 12px 16px;
   background: rgba(18, 18, 18, 0.92);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
 }
 
-.search-wrap {
-  flex: 1;
+.brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+}
+
+.brand-badge {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--green), #16a34a);
+  color: #06120a;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+}
+
+.brand-name {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.brand-name span {
+  color: var(--green);
+}
+
+.search-wrap {
+  flex: 1;
+  max-width: 420px;
+  margin-left: auto;
+}
+
+.search-input {
+  width: 100%;
   padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg-elev);
-}
-
-.search-icon {
-  width: 18px;
-  height: 18px;
-  color: var(--text-dim);
-  flex-shrink: 0;
-}
-
-.search-input {
-  flex: 1;
-  background: transparent;
-  border: none;
   color: var(--text);
   font-size: 14px;
   outline: none;
+  transition: border-color 0.2s;
 }
 
 .search-input::placeholder {
   color: var(--text-dim);
 }
 
-.btn-all-events {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--text-dim);
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-.btn-all-events:hover {
+.search-input:focus {
   border-color: var(--green);
-  color: var(--text);
-}
-
-.filter-icon {
-  width: 16px;
-  height: 16px;
 }
 
 /* ---------- Content ---------- */
@@ -122,13 +127,16 @@ button {
 }
 
 .section-head {
-  padding: 16px 4px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 4px 16px;
 }
 
 .section-title {
   font-size: 20px;
   font-weight: 800;
-  letter-spacing: 0.5px;
 }
 
 .section-sub {
@@ -226,15 +234,13 @@ button {
 }
 
 .league-tag {
-  flex-shrink: 0;
+  margin: 0 16px;
+  padding: 6px 0 0;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--text-dim);
-  padding-right: 8px;
-  border-right: 1px solid var(--border);
-  margin-right: 4px;
 }
 
 .team {
@@ -286,7 +292,6 @@ button {
   align-items: center;
   gap: 4px;
   padding: 0 6px;
-  min-width: 70px;
 }
 
 .match-time {
@@ -305,49 +310,6 @@ button {
   font-weight: 700;
   color: var(--text-dim);
   letter-spacing: 1px;
-}
-
-/* Toggle switch */
-.toggle-switch {
-  position: relative;
-  width: 44px;
-  height: 24px;
-  flex-shrink: 0;
-}
-
-.toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--border);
-  border-radius: 999px;
-  transition: 0.3s;
-}
-
-.toggle-slider::before {
-  content: "";
-  position: absolute;
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background: white;
-  border-radius: 50%;
-  transition: 0.3s;
-}
-
-.toggle-switch input:checked + .toggle-slider {
-  background: var(--green);
-}
-
-.toggle-switch input:checked + .toggle-slider::before {
-  transform: translateX(20px);
 }
 
 /* ---------- Prediction Dropdown ---------- */
@@ -519,60 +481,49 @@ button {
   color: var(--green);
 }
 
-/* ---------- Action Buttons ---------- */
-.actions {
+/* ---------- Bottom Navigation ---------- */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
   display: flex;
-  gap: 12px;
-  justify-content: center;
-  padding: 24px 16px 40px;
-}
-
-.actions[hidden] {
-  display: none;
-}
-
-.btn-primary {
-  display: inline-flex;
+  justify-content: space-around;
   align-items: center;
-  gap: 10px;
-  padding: 14px 28px;
-  border-radius: 12px;
-  background: var(--green);
-  color: #06120a;
-  font-size: 14px;
-  font-weight: 700;
-  box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35);
+  height: var(--bottom-nav-h);
+  background: rgba(26, 26, 26, 0.95);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
 }
 
-.btn-primary:hover {
-  background: #16a34a;
-}
-
-.btn-secondary {
-  display: inline-flex;
+.nav-item {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 14px 24px;
-  border-radius: 12px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 700;
+  gap: 4px;
+  padding: 6px 12px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  transition: color 0.2s;
 }
 
-.btn-secondary:hover {
-  border-color: var(--green);
+.nav-item.active {
   color: var(--green);
 }
 
-.btn-icon {
-  width: 18px;
-  height: 18px;
+.nav-icon {
+  width: 22px;
+  height: 22px;
 }
 
 /* ---------- Responsive ---------- */
 @media (min-width: 640px) {
+  .brand-name {
+    font-size: 20px;
+  }
+
   .team-name {
     font-size: 14px;
   }
@@ -596,10 +547,11 @@ button {
   .search-wrap {
     order: 3;
     flex-basis: 100%;
+    max-width: none;
   }
 
-  .btn-all-events {
-    order: 2;
+  .brand-name {
+    font-size: 16px;
   }
 }
 
