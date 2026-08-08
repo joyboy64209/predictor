@@ -15,12 +15,16 @@ const CONFIG = {
   THRESHOLD: 75,
   DEFAULT_LEAGUE: 'PL',
   COMPETITIONS: [
-    { code: 'PL', name: 'Premier League' },
-    { code: 'PD', name: 'La Liga' },
-    { code: 'SA', name: 'Serie A' },
-    { code: 'BL1', name: 'Bundesliga' },
-    { code: 'FL1', name: 'Ligue 1' },
-    { code: 'CL', name: 'Champions League' }
+    { code: 'PL', name: 'Premier League', tier: 1 },
+    { code: 'PD', name: 'La Liga', tier: 1 },
+    { code: 'SA', name: 'Serie A', tier: 1 },
+    { code: 'BL1', name: 'Bundesliga', tier: 1 },
+    { code: 'FL1', name: 'Ligue 1', tier: 1 },
+    { code: 'DED', name: 'Eredivisie', tier: 2 },
+    { code: 'PPL', name: 'Primeira Liga', tier: 2 },
+    { code: 'JPL', name: 'Belgian Pro League', tier: 2 },
+    { code: 'CL', name: 'Champions League', tier: 0 },
+    { code: 'EL', name: 'Europa League', tier: 0 }
   ]
 };
 
@@ -46,8 +50,20 @@ function fmtTime(iso) {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
+function fmtDateKey(iso) {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function clampPct(n) {
   return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function isFileProtocol() {
+  return window.location.protocol === 'file:';
 }
 
 /* =========================================================
@@ -58,12 +74,16 @@ class DataFetcher {
     this.proxy = proxy;
   }
 
-  async getFixtures(leagueCode) {
-    const key = `vs_fixtures_${leagueCode}`;
+  async getMatchesForLeague(leagueCode) {
+    const key = `vs_matches_${leagueCode}`;
     const cached = this._readCache(key);
     if (cached) return cached;
 
-    const data = await this._fetch(`/matches?competitions=${leagueCode}&status=SCHEDULED&limit=20`);
+    const today = new Date();
+    const from = today.toISOString().split('T')[0];
+    const to = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const data = await this._fetch(`/matches?competitions=${leagueCode}&dateFrom=${from}&dateTo=${to}&limit=100`);
     this._writeCache(key, data);
     return data;
   }
@@ -100,7 +120,10 @@ class DataFetcher {
       });
     } catch (networkErr) {
       console.error('[DataFetcher] Network error:', networkErr);
-      throw new Error(`Cannot reach proxy at ${url}. Are you running "npx vercel dev"? If opening index.html directly, the proxy won't work — use a local server.`);
+      if (isFileProtocol()) {
+        throw new Error('You are opening this page directly from a file. Please run "npx vercel dev" or use a local server so the API proxy can work.');
+      }
+      throw new Error(`Cannot reach proxy at ${url}. Are you running "npx vercel dev"?`);
     }
 
     if (!res.ok) {
@@ -264,6 +287,15 @@ class UIRenderer {
     this.error = $('#error');
     this.errorMsg = $('#errorMessage');
     this.updatedLabel = $('#updatedLabel');
+    this.fileWarning = $('#fileWarning');
+  }
+
+  showFileWarning() {
+    if (this.fileWarning) this.fileWarning.hidden = false;
+  }
+
+  hideFileWarning() {
+    if (this.fileWarning) this.fileWarning.hidden = true;
   }
 
   showLoading() {
@@ -284,24 +316,68 @@ class UIRenderer {
     this.error.hidden = true;
   }
 
-  render(matches, leagueName) {
+  renderGrouped(grouped) {
     this.matchList.innerHTML = '';
+    this.hideStatus();
+    this.hideFileWarning();
     this.updatedLabel.textContent = `Updated ${new Date().toLocaleTimeString()}`;
 
-    if (!matches.length) {
-      this.matchList.appendChild(el('p', 'no-pick', 'No upcoming fixtures found.'));
+    const dates = Object.keys(grouped).sort();
+    if (!dates.length) {
+      this.matchList.appendChild(el('p', 'no-pick', 'No upcoming fixtures found for the next 30 days.'));
       return;
     }
 
     const frag = document.createDocumentFragment();
-    matches.forEach((m) => frag.appendChild(this._card(m, leagueName)));
+    dates.forEach((date) => {
+      frag.appendChild(this._dateHeader(date));
+      const leagues = grouped[date];
+      const sortedLeagues = Object.keys(leagues).sort((a, b) => {
+        const aComp = CONFIG.COMPETITIONS.find((c) => c.code === a);
+        const bComp = CONFIG.COMPETITIONS.find((c) => c.code === b);
+        const aTier = aComp ? aComp.tier : 99;
+        const bTier = bComp ? bComp.tier : 99;
+        if (aTier !== bTier) return aTier - bTier;
+        return (leagues[a][0]?.leagueName || a).localeCompare(leagues[b][0]?.leagueName || b);
+      });
+      sortedLeagues.forEach((code) => {
+        const matches = leagues[code];
+        if (!matches || !matches.length) return;
+        const comp = CONFIG.COMPETITIONS.find((c) => c.code === code);
+        frag.appendChild(this._leagueHeader(comp ? comp.name : code));
+        const list = el('div', 'league-matches');
+        matches.forEach((m) => list.appendChild(this._card(m)));
+        frag.appendChild(list);
+      });
+    });
     this.matchList.appendChild(frag);
   }
 
-  _card(match, leagueName) {
+  _dateHeader(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    let label = d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    if (d.getTime() === today.getTime()) label = 'Today — ' + label;
+    else if (d.getTime() === tomorrow.getTime()) label = 'Tomorrow — ' + label;
+
+    const header = el('div', 'date-header');
+    header.textContent = label;
+    return header;
+  }
+
+  _leagueHeader(name) {
+    const header = el('div', 'league-header');
+    header.textContent = name;
+    return header;
+  }
+
+  _card(match) {
     const card = el('article', 'match-card');
     card.dataset.id = match.id;
-    card.append(el('div', 'league-tag', leagueName), this._main(match), this._predictions(match));
+    card.append(this._main(match), this._predictions(match));
     return card;
   }
 
@@ -474,29 +550,51 @@ class AppController {
   async load() {
     this.ui.showLoading();
     try {
-      console.log('[App] Loading upcoming fixtures...');
-      const [fixtures, standings] = await Promise.all([
-        this.fetcher.getFixtures(this.league),
-        this.fetcher.getStandings(this.league)
-      ]);
+      if (isFileProtocol()) {
+        this.ui.showFileWarning();
+      }
 
-      const matches = fixtures.matches || [];
-      console.log(`[App] Found ${matches.length} upcoming fixtures`);
+      console.log('[App] Loading upcoming fixtures for next 30 days...');
+      const allMatches = [];
+      const standingsPromises = [];
 
-      if (matches.length) {
-        const enriched = await this.enricher.enrich(matches, standings.standings || null);
-        this._allMatches = enriched;
-        this.ui.hideStatus();
-        this.ui.render(enriched, this._leagueName());
-      } else {
+      for (const comp of CONFIG.COMPETITIONS) {
+        try {
+          const data = await this.fetcher.getMatchesForLeague(comp.code);
+          const matches = (data.matches || []).map((m) => ({ ...m, leagueCode: comp.code, leagueName: comp.name }));
+          allMatches.push(...matches);
+          standingsPromises.push(this.fetcher.getStandings(comp.code).catch(() => ({ standings: null })));
+        } catch (err) {
+          console.warn(`[App] Failed to load ${comp.name}:`, err.message);
+        }
+      }
+
+      console.log(`[App] Found ${allMatches.length} total matches`);
+
+      if (!allMatches.length) {
         this._allMatches = [];
         this.ui.hideStatus();
-        this.ui.render([], this._leagueName());
+        this.ui.renderGrouped({});
+        return;
       }
+
+      const standingsResults = await Promise.all(standingsPromises);
+      const standingsMap = {};
+      standingsResults.forEach((s, idx) => {
+        const code = CONFIG.COMPETITIONS[idx]?.code;
+        if (code && s.standings) standingsMap[code] = s.standings;
+      });
+
+      const enriched = await this.enricher.enrich(allMatches, standingsMap[this.league] || null);
+      this._allMatches = enriched;
+
+      const grouped = this._groupByDateAndLeague(enriched);
+      this.ui.hideStatus();
+      this.ui.renderGrouped(grouped);
     } catch (err) {
       console.error('[App] Load error:', err);
       const msg = err.message || 'Unknown error';
-      if (msg.includes('Cannot reach proxy')) {
+      if (msg.includes('Cannot reach proxy') || msg.includes('opening this page directly')) {
         this.ui.showError(msg);
       } else if (msg.includes('500')) {
         this.ui.showError('Server error: FOOTBALL_DATA_API_KEY may not be configured on Vercel. Check Vercel → Settings → Environment Variables.');
@@ -506,11 +604,24 @@ class AppController {
     }
   }
 
+  _groupByDateAndLeague(matches) {
+    const grouped = {};
+    matches.forEach((m) => {
+      const dateKey = fmtDateKey(m.utcDate);
+      const leagueCode = m.leagueCode || 'UNKNOWN';
+      if (!grouped[dateKey]) grouped[dateKey] = {};
+      if (!grouped[dateKey][leagueCode]) grouped[dateKey][leagueCode] = [];
+      grouped[dateKey][leagueCode].push(m);
+    });
+    return grouped;
+  }
+
   _filter(query) {
     if (!this._allMatches.length) return;
     const q = query.trim().toLowerCase();
     if (!q) {
-      this.ui.render(this._allMatches, this._leagueName());
+      const grouped = this._groupByDateAndLeague(this._allMatches);
+      this.ui.renderGrouped(grouped);
       return;
     }
     const filtered = this._allMatches.filter(
@@ -518,12 +629,8 @@ class AppController {
         m.homeTeam.name.toLowerCase().includes(q) ||
         m.awayTeam.name.toLowerCase().includes(q)
     );
-    this.ui.render(filtered, this._leagueName());
-  }
-
-  _leagueName() {
-    const comp = CONFIG.COMPETITIONS.find((c) => c.code === this.league);
-    return comp ? comp.name : this.league;
+    const grouped = this._groupByDateAndLeague(filtered);
+    this.ui.renderGrouped(grouped);
   }
 }
 
@@ -531,7 +638,11 @@ class AppController {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] Initializing...');
   console.log('[App] Proxy URL:', CONFIG.PROXY);
-  console.log('[App] API Key present:', !!process.env?.FOOTBALL_DATA_API_KEY);
+  console.log('[App] Protocol:', window.location.protocol);
+
+  if (isFileProtocol()) {
+    console.warn('[App] Running via file:// protocol — API proxy will not work. Use npx vercel dev');
+  }
 
   window.app = new AppController();
   window.app.load();

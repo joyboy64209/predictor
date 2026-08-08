@@ -13,6 +13,17 @@
 </head>
 <body>
   <div id="app">
+    <!-- File protocol warning -->
+    <div id="fileWarning" class="file-warning" hidden>
+      <div class="file-warning-inner">
+        <span class="file-warning-icon">⚠️</span>
+        <div>
+          <strong>Local file detected</strong>
+          <p>You are opening this page directly from a file. The API proxy won't work. Please run <code>npx vercel dev</code> in the project folder and open <code>http://localhost:3000</code> instead.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- Top Navigation -->
     <header class="top-nav">
       <div class="brand">
