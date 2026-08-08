@@ -552,6 +552,7 @@ class AppController {
     try {
       if (isFileProtocol()) {
         this.ui.showFileWarning();
+        throw new Error('You are opening this page directly from a file. Please run "npx vercel dev" or use a local server so the API proxy can work.');
       }
 
       console.log('[App] Loading upcoming fixtures for next 30 days...');
@@ -639,10 +640,6 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] Initializing...');
   console.log('[App] Proxy URL:', CONFIG.PROXY);
   console.log('[App] Protocol:', window.location.protocol);
-
-  if (isFileProtocol()) {
-    console.warn('[App] Running via file:// protocol — API proxy will not work. Use npx vercel dev');
-  }
 
   window.app = new AppController();
   window.app.load();
