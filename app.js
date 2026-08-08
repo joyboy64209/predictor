@@ -79,11 +79,8 @@ class DataFetcher {
     const cached = this._readCache(key);
     if (cached) return cached;
 
-    const today = new Date();
-    const from = today.toISOString().split('T')[0];
-    const to = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    const data = await this._fetch(`/matches?competitions=${leagueCode}&dateFrom=${from}&dateTo=${to}&limit=100`);
+    // Fetch without date filters - get whatever is available
+    const data = await this._fetch(`/matches?competitions=${leagueCode}&status=SCHEDULED&limit=100`);
     this._writeCache(key, data);
     return data;
   }
@@ -324,7 +321,7 @@ class UIRenderer {
 
     const dates = Object.keys(grouped).sort();
     if (!dates.length) {
-      this.matchList.appendChild(el('p', 'no-pick', 'No upcoming fixtures found for the next 7 days.'));
+      this.matchList.appendChild(el('p', 'no-pick', 'No upcoming fixtures found.'));
       return;
     }
 
@@ -557,7 +554,7 @@ class AppController {
         throw new Error('You are opening this page directly from a file. Please run "npx vercel dev" or use a local server so the API proxy can work.');
       }
 
-      console.log('[App] Loading upcoming fixtures for next 7 days...');
+      console.log('[App] Loading upcoming fixtures...');
       const allMatches = [];
       const standingsPromises = [];
 
