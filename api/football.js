@@ -45,12 +45,14 @@ export default async function handler(req, res) {
 
   const { pathname, searchParams } = new URL(req.url, `http://${req.headers.host}`);
   
-  // Strip /api/football prefix, preserving the leading slash of the remaining path
-  // Matches /api/football or /api/football/ at the end, but not /api/football/something
-  let apiPath = pathname.replace(/^\/api\/football(?:\/(?=$))?/, '') || '/matches';
+  // Strip /api/football prefix from pathname
+  // pathname will be like /api/football/matches?...
+  let apiPath = pathname.replace(/^\/api\/football/, '');
   
-  // Ensure path starts with /
-  if (!apiPath.startsWith('/')) apiPath = '/' + apiPath;
+  // If nothing left after stripping, default to /matches
+  if (!apiPath || apiPath === '/') {
+    apiPath = '/matches';
+  }
 
   // Whitelist guard
   if (!isAllowed(apiPath)) {
