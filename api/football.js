@@ -44,11 +44,17 @@ export default async function handler(req, res) {
   }
 
   const { pathname, searchParams } = new URL(req.url, `http://${req.headers.host}`);
-  const apiPath = pathname.replace(/^\/api\/football/, '') || '/matches';
+  
+  // Strip /api/football prefix, preserving the leading slash of the remaining path
+  // Matches /api/football or /api/football/ at the end, but not /api/football/something
+  let apiPath = pathname.replace(/^\/api\/football(?:\/(?=$))?/, '') || '/matches';
+  
+  // Ensure path starts with /
+  if (!apiPath.startsWith('/')) apiPath = '/' + apiPath;
 
   // Whitelist guard
   if (!isAllowed(apiPath)) {
-    return res.status(400).json({ error: 'Invalid path' });
+    return res.status(400).json({ error: 'Invalid path', path: apiPath });
   }
 
   const key = process.env.FOOTBALL_DATA_API_KEY;
@@ -62,6 +68,8 @@ export default async function handler(req, res) {
 
   const query = pick(allowedParams(apiPath), searchParams);
   const url = API_BASE + apiPath + (query ? '?' + query : '');
+
+  console.log(`[API] Proxying: ${apiPath} -> ${url}`);
 
   try {
     const upstream = await fetch(url, {
