@@ -539,6 +539,7 @@ class AppController {
     this.ui = new UIRenderer();
     this.league = CONFIG.DEFAULT_LEAGUE;
     this._allMatches = [];
+    this._loadErrors = [];
     this._bind();
   }
 
@@ -549,6 +550,7 @@ class AppController {
 
   async load() {
     this.ui.showLoading();
+    this._loadErrors = [];
     try {
       if (isFileProtocol()) {
         this.ui.showFileWarning();
@@ -566,7 +568,9 @@ class AppController {
           allMatches.push(...matches);
           standingsPromises.push(this.fetcher.getStandings(comp.code).catch(() => ({ standings: null })));
         } catch (err) {
-          console.warn(`[App] Failed to load ${comp.name}:`, err.message);
+          const msg = err.message || 'Unknown error';
+          console.warn(`[App] Failed to load ${comp.name}:`, msg);
+          this._loadErrors.push(`${comp.name}: ${msg}`);
         }
       }
 
@@ -575,7 +579,11 @@ class AppController {
       if (!allMatches.length) {
         this._allMatches = [];
         this.ui.hideStatus();
-        this.ui.renderGrouped({});
+        if (this._loadErrors.length > 0) {
+          this.ui.showError(`Failed to load fixtures.\n\n${this._loadErrors.join('\n')}\n\nIf deployed on Vercel, ensure FOOTBALL_DATA_API_KEY is set in Environment Variables.`);
+        } else {
+          this.ui.renderGrouped({});
+        }
         return;
       }
 

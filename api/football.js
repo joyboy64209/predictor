@@ -53,8 +53,10 @@ export default async function handler(req, res) {
 
   const key = process.env.FOOTBALL_DATA_API_KEY;
   if (!key) {
+    console.error('[API] FOOTBALL_DATA_API_KEY is not configured');
     return res.status(500).json({
-      error: 'FOOTBALL_DATA_API_KEY is not configured. Add it in Vercel project settings.'
+      error: 'FOOTBALL_DATA_API_KEY is not configured. Add it in Vercel project settings.',
+      hint: 'Vercel → Project Settings → Environment Variables → Add FOOTBALL_DATA_API_KEY'
     });
   }
 
@@ -80,6 +82,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', `s-maxage=300, public, stale-while-revalidate=900`);
     res.status(upstream.status).json(body);
   } catch (err) {
+    console.error('[API] Upstream request failed:', err);
     res.status(502).json({ error: `Upstream request failed: ${err.message}` });
   }
 }
