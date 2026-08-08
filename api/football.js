@@ -46,7 +46,6 @@ export default async function handler(req, res) {
   const { pathname, searchParams } = new URL(req.url, `http://${req.headers.host}`);
   
   // Strip /api/football prefix from pathname
-  // pathname will be like /api/football/matches?...
   let apiPath = pathname.replace(/^\/api\/football/, '');
   
   // If nothing left after stripping, default to /matches
@@ -69,7 +68,7 @@ export default async function handler(req, res) {
   }
 
   const query = pick(allowedParams(apiPath), searchParams);
-  const url = API_BASE + apiPath + (query ? '?' + query : '');
+  let url = API_BASE + apiPath + (query ? '?' + query : '');
 
   console.log(`[API] Proxying: ${apiPath} -> ${url}`);
 
@@ -80,6 +79,32 @@ export default async function handler(req, res) {
         'X-Response-Control': 'minified'
       }
     });
+
+    // If 404, try without date filters as fallback
+    if (upstream.status === 404 && apiPath.includes('/matches') && searchParams.has('dateFrom')) {
+      console.log(`[API] 404 with date filters, retrying without dates...`);
+      const fallbackParams = new URLSearchParams(searchParams);
+      fallbackParams.delete('dateFrom');
+      fallbackParams.delete('dateTo');
+      const fallbackQuery = fallbackParams.toString();
+      const fallbackUrl = API_BASE + apiPath + (fallbackQuery ? '?' + fallbackQuery : '');
+      
+      console.log(`[API] Fallback: ${fallbackUrl}`);
+      const fallbackRes = await fetch(fallbackUrl, {
+        headers: {
+          'X-Auth-Token': key,
+          'X-Response-Control': 'minified'
+        }
+      });
+      
+      const body = await fallbackRes.json();
+      const remaining = fallbackRes.headers.get('x-requests-remaining') || null;
+      if (remaining && typeof body === 'object' && body !== null) {
+        body.meta = { ...(body.meta || {}), requestsRemaining: remaining };
+      }
+      res.setHeader('Cache-Control', `s-maxage=300, public, stale-while-revalidate=900`);
+      return res.status(fallbackRes.status).json(body);
+    }
 
     const body = await upstream.json();
 
